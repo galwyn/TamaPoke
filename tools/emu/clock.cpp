@@ -6,6 +6,9 @@
 
 extern volatile bool g_touchDown;   // SDL layer: mouse button state
 extern bool wasPressed;             // sketch: a gesture is being tracked
+// sketch: dialogs that wait for a tap and close themselves at these millis.
+// Scaled, the 6 s food picker lasts 100 real ms at --fast 60 and cannot be used.
+extern uint32_t feedMenuUntil, confirmUntil, choiceUntil;
 
 static std::chrono::steady_clock::time_point g_tLast = std::chrono::steady_clock::now();
 static uint64_t g_virtUs = 0;      // accumulated in us so the scaling cannot drift
@@ -26,6 +29,7 @@ uint32_t millis() {
   uint64_t dus = std::chrono::duration_cast<std::chrono::microseconds>(now - g_tLast).count();
   g_tLast = now;
   bool gesturing = g_touchDown || wasPressed;   // press .. release resolved
-  g_virtUs += dus * (gesturing ? 1 : g_timeScale);
+  bool dialogOpen = feedMenuUntil || confirmUntil || choiceUntil;
+  g_virtUs += dus * ((gesturing || dialogOpen) ? 1 : g_timeScale);
   return (uint32_t)(g_virtUs / 1000);
 }

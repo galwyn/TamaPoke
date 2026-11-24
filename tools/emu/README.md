@@ -46,7 +46,7 @@ clipped on real hardware.
 | `--fast N` | run the clock N× faster — `--fast 60` turns an in-game minute into a second, so a full 3-day life takes about an hour. The speed-up is **suspended while you are touching the panel**: the firmware times taps and swipes off the same `millis()`, so scaling it during a gesture would shrink the tap window (`dt < 1500`) to `1500/N` real ms and make the screen unclickable |
 | `--save FILE` | where to persist NVS (default `tamapoke.nvs` in the cwd) |
 | `--wipe` | delete the save first |
-| `--sprites DIR` | sprite directory (defaults to `tools/sdcard/mons`) |
+| `--sprites DIR` | sprite directory (defaults to `../sdcard/mons` relative to the cwd, so pass `--sprites tools/sdcard/mons` when running from the repo root) |
 
 ### Headless captures
 
@@ -61,6 +61,20 @@ sips -s format png shot.ppm --out shot.png     # macOS; or use ImageMagick
 `--shot` accepts `main`, `battle`, `profile`, `medals`, `progress`, `gallery`,
 `clock`, `menu`, `party`, `partyfull`, `egg`, `starter`. `--lvl`, `--iv` and
 `--dex` set up the pet first.
+
+## In a browser
+
+The same firmware compiles to WebAssembly, so it runs in a browser page and can
+be driven by Playwright for screenshots and recordings.
+
+```bash
+brew install emscripten
+bash tools/emu/build_web.sh            # bundles tools/sdcard/mons if present
+python3 -m http.server -d tools/emu/web 8765
+open "http://localhost:8765/?fast=60"
+```
+
+Serial commands go in the text box under the screen.
 
 ## How it works
 

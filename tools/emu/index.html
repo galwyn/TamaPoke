@@ -1,0 +1,22 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>TamaPoke Emulator</title>
+<style>
+body{margin:0;background:#111;color:#ddd;font:14px system-ui;display:flex;flex-direction:column;align-items:center;gap:12px;padding:16px}
+canvas{border-radius:50%;width:466px;height:466px;image-rendering:pixelated;touch-action:none}
+#log{width:466px;height:120px;overflow:auto;background:#000;font:12px monospace;padding:6px;white-space:pre-wrap}
+input{width:466px;padding:6px;font:13px monospace}
+</style></head><body>
+<canvas id="canvas" width="466" height="466" oncontextmenu="event.preventDefault()"></canvas>
+<input id="cmd" placeholder="Serial command (STATS, LVL 73, EGG 150 1...) then Enter">
+<div id="log"></div>
+<script>
+const log=document.getElementById('log');
+var Module={canvas:document.getElementById('canvas'),arguments:['--scale','1','--fast','60'],
+ print:t=>{log.textContent+=t+'\n';log.scrollTop=1e9},printErr:t=>{log.textContent+=t+'\n'}};
+const q=new URLSearchParams(location.search);
+if(q.get('fast'))Module.arguments[3]=q.get('fast');
+document.getElementById('cmd').addEventListener('keydown',e=>{
+ if(e.key==='Enter'){Module.ccall('emuSerial',null,['string'],[e.target.value]);e.target.value=''}});
+</script>
+<script src="tamapoke.js"></script>
+</body></html>

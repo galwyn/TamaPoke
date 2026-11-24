@@ -27,6 +27,12 @@ void FakeESP::restart() { Serial.println("emu: ESP.restart() -> exiting"); exit(
 // --- stdin-backed serial ---
 static std::deque<std::string> g_lines;
 static std::string g_partial;
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+// The browser has no stdin: the page sends serial lines through this.
+extern "C" EMSCRIPTEN_KEEPALIVE void emuSerial(const char *line) { g_lines.push_back(line); }
+static void pumpStdin() {}
+#else
 static void pumpStdin() {
   fd_set fds;
   FD_ZERO(&fds);
@@ -43,6 +49,7 @@ static void pumpStdin() {
     FD_ZERO(&fds); FD_SET(0, &fds); tv = { 0, 0 };
   }
 }
+#endif
 // --- simulating a crash ---
 //
 // The board keeps its breadcrumb in RTC memory, which survives a panic but not
@@ -474,7 +481,11 @@ int main(int argc, char **argv) {
       SDL_RenderCopy(ren, tex, nullptr, nullptr);
       SDL_RenderPresent(ren);
     }
+#ifdef __EMSCRIPTEN__
+    emscripten_sleep(5);   // hand the frame back to the browser (ASYNCIFY)
+#else
     SDL_Delay(5);
+#endif
   }
 
   nvsSave(save);

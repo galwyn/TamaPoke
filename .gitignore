@@ -39,3 +39,6 @@ tamapoke.nvs
 tamapoke.nvs.*
 tools/_*.svg
 backups/
+
+# local Python env for the sprite tools
+.venv/
