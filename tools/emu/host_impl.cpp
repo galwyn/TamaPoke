@@ -41,7 +41,7 @@ static uint8_t *slurp(const std::string &path, uint32_t *size) {
 bool PmdMon::load(int16_t dexNum, bool shiny) {
   if (dexNum < 1 || dexNum > 999) return false;
   unload();
-  char p[64];
+  char p[512];  // was 64: an absolute sprite dir is longer, and the path was silently cut off
   snprintf(p, sizeof(p), "%s/p%s%03u.bin", g_spriteDir.c_str(), shiny ? "s" : "", (unsigned)dexNum);
   uint32_t size = 0;
   blob = slurp(p, &size);
@@ -79,6 +79,17 @@ bool PmdMon::load(int16_t dexNum, bool shiny) {
       }
     }
     a.base = base;
+    // first row any frame draws in (the canvas above it is padding)
+    uint8_t top = a.h;
+    for (uint8_t f = 0; f < a.frames; f++) {
+      const uint8_t *fr = a.data + (uint32_t)f * a.w * a.h;
+      for (int r = 0; r < a.h && r < top; r++) {
+        bool any = false;
+        for (int c = 0; c < a.w && !any; c++) if (fr[r * a.w + c] != 0xFF) any = true;
+        if (any) { top = r; break; }
+      }
+    }
+    a.top = top < base ? top : 0;
   }
   dex = dexNum;
   loaded = true;
@@ -87,7 +98,7 @@ bool PmdMon::load(int16_t dexNum, bool shiny) {
 
 void PmdMon::unload() {
   if (blob) { free(blob); blob = nullptr; }
-  for (auto &a : acts) { a.w = a.h = a.frames = a.base = 0; a.data = nullptr; }
+  for (auto &a : acts) { a.w = a.h = a.frames = a.base = a.top = 0; a.data = nullptr; }
   loaded = false;
 }
 

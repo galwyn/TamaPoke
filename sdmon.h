@@ -28,6 +28,7 @@ enum : uint8_t {
 struct PmdAct {
   uint8_t w = 0, h = 0, frames = 0;
   uint8_t base = 0;  // fila+1 del pixel mas bajo (anclar por los pies, no el lienzo)
+  uint8_t top = 0;   // first row any frame draws in: the canvas above it is padding
   uint16_t ms[24];
   const uint8_t *data = nullptr;  // frames * w * h en el blob
 };
@@ -49,6 +50,29 @@ struct PmdMon {
   void unload();
   bool has(uint8_t a) const { return loaded && a < PMD_NACTS && acts[a].frames > 0; }
 };
+
+// The pet on the main screen is sized by what it DRAWS, not by its canvas. A PMD
+// canvas is mostly transparent padding (a typical creature is 25 px tall in a
+// 40-56 px canvas), so aiming the canvas at 170 px drew the creature ~92 px tall.
+#define PET_TARGET_H 170  // standing pet height on screen, px
+#define PET_MAX_SCALE 8   // integer zoom cap: only the smallest sprites reach it
+#define PET_MAX_H 190     // highest any action may rise above the ground line (y=304),
+                          // so it stays under the name and mood lines
+// rows an action draws between its highest pixel and its feet
+inline uint8_t pmdAboveGround(const PmdAct &a) { return a.base > a.top ? a.base - a.top : a.h; }
+inline uint8_t pmdVisH(const PmdAct &a) { return pmdAboveGround(a); }
+// One scale per creature from its standing pose, so walking or eating never
+// changes its size; an action is scaled down only if it would rise past PET_MAX_H.
+inline uint8_t petPmdScale(const PmdMon &m, uint8_t actId) {
+  const PmdAct &idle = m.acts[PMD_IDLE];
+  uint8_t vh = idle.frames ? pmdVisH(idle) : 0;
+  uint8_t s = vh ? PET_TARGET_H / vh : PET_MAX_SCALE;
+  if (s < 2) s = 2;
+  if (s > PET_MAX_SCALE) s = PET_MAX_SCALE;
+  if (actId < PMD_NACTS && m.acts[actId].frames)
+    while (s > 2 && pmdAboveGround(m.acts[actId]) * s > PET_MAX_H) s--;
+  return s;
+}
 
 // miniaturas de la galeria (thumbs.bin entero en PSRAM)
 struct SdThumbs {

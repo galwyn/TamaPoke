@@ -36,7 +36,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.11"
+#define FW_VERSION "3.12"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -5724,7 +5724,7 @@ void drawCeremony() {
       x = CX - (int)(((t - 0.30f) / 0.70f) * (CX + 120));
       fade = (t > 0.6f) && ((now / 160) % 2 == 0);  // parpadea hacia la silueta
     }
-    drawPmdAct(act, x, y, now, true, fade, 5);  // fade=silueta: se difumina al irse
+    drawPetPmd(act, x, y, now, true, fade);  // fade=silueta: se difumina al irse
     // lagrima cayendo del bicho
     if (t < 0.55f) {
       int ty = y - 150 + (int)((now / 6) % 40);
@@ -5753,7 +5753,7 @@ void drawCeremony() {
     act = pmd.has(PMD_WALKR) ? PMD_WALKR : PMD_IDLE;
     x = CX + (int)(((t - 0.45f) / 0.55f) * (CX + 140));
   }
-  drawPmdAct(act, x, y, now, true, false, 5);
+  drawPetPmd(act, x, y, now, true, false);
   if (pet.showHeart())                     // corazon grande siguiendo al bicho
     drawMap(SPR_HEART, 32, x + 50, y - 190, 2, false);
 }
@@ -5898,8 +5898,8 @@ void drawEvolveFX(uint32_t now) {
   // final (t>0.9) se queda fija en la nueva para el fogonazo de revelado
   int period = 60 + (int)(220 * (1.0f - t));
   bool showOld = t < 0.9f && evoPmd.loaded && ((now / period) % 2) == 0;
-  if (showOld) drawPmdActM(evoPmd, PMD_IDLE, cx, PET_GROUND, 0, true, true, 5);
-  else drawPmdAct(PMD_IDLE, cx, PET_GROUND, 0, true, true, 5);
+  if (showOld) drawPetPmdM(evoPmd, PMD_IDLE, cx, PET_GROUND, 0, true, true);
+  else drawPetPmd(PMD_IDLE, cx, PET_GROUND, 0, true, true);
   // chispas que salen disparadas
   for (int i = 0; i < 10; i++) {
     float a = i * (float)(PI / 5) + t * 4.0f;
@@ -6055,6 +6055,21 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
   if (sBase > maxS) sBase = maxS;
   uint8_t s = sBase;
   while (s > 2 && a.h * s > 250) s--;  // acciones con frame grande (ataque)
+  drawPmdActAt(m, actId, cx, groundY, t, loop, sil, s);
+}
+// The pet on the main screen (and its evolution and farewell): sized by what the
+// sprite draws, not by its padded canvas -- see petPmdScale() in sdmon.h.
+void drawPetPmdM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil) {
+  if (!m.acts[actId].frames) return;
+  drawPmdActAt(m, actId, cx, groundY, t, loop, sil, petPmdScale(m, actId));
+}
+void drawPetPmd(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil) {
+  drawPetPmdM(pmd, actId, cx, groundY, t, loop, sil);
+}
+// draws one action at a fixed integer zoom s, anchored by its feet
+void drawPmdActAt(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t s) {
+  const PmdAct &a = m.acts[actId];
+  if (!a.frames) return;
   uint8_t fi = pmdFrameAt(a, t, loop);
   const uint8_t *fr = a.data + (uint32_t)fi * a.w * a.h;
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
@@ -6142,7 +6157,7 @@ void drawPetPMD() {
     if (!pmd.has(act)) act = PMD_IDLE;
   }
 
-  drawPmdAct(act, (int)beh.x, PET_GROUND, now - beh.t0, loop || act == PMD_IDLE, false, 5);
+  drawPetPmd(act, (int)beh.x, PET_GROUND, now - beh.t0, loop || act == PMD_IDLE, false);
 
   if (pet.showHeart()) drawMap(SPR_HEART, 32, (int)beh.x + 50, PET_GROUND - 190, 2, false);
 }

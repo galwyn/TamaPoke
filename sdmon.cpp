@@ -75,6 +75,17 @@ bool PmdMon::load(int16_t dexNum, bool shiny) {
       }
     }
     a.base = base;
+    // first row any frame draws in (the canvas above it is padding)
+    uint8_t top = a.h;
+    for (uint8_t f = 0; f < a.frames; f++) {
+      const uint8_t *fr = a.data + (uint32_t)f * a.w * a.h;
+      for (int r = 0; r < a.h && r < top; r++) {
+        bool any = false;
+        for (int c = 0; c < a.w && !any; c++) if (fr[r * a.w + c] != 0xFF) any = true;
+        if (any) { top = r; break; }
+      }
+    }
+    a.top = top < base ? top : 0;
   }
   loaded = true;
   Serial.printf("cargado %s (%u KB)\n", path, size / 1024);
@@ -87,7 +98,7 @@ void PmdMon::unload() {
     blob = nullptr;
   }
   for (auto &a : acts) {
-    a.w = a.h = a.frames = a.base = 0;
+    a.w = a.h = a.frames = a.base = a.top = 0;
     a.data = nullptr;
   }
   loaded = false;
