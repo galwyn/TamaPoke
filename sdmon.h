@@ -54,10 +54,10 @@ struct PmdMon {
 // The pet on the main screen is sized by what it DRAWS, not by its canvas. A PMD
 // canvas is mostly transparent padding (a typical creature is 25 px tall in a
 // 40-56 px canvas), so aiming the canvas at 170 px drew the creature ~92 px tall.
-#define PET_TARGET_H 170  // standing pet height on screen, px
+#define PET_TARGET_H 190  // standing pet height on screen, px: all the room the layout has
 #define PET_MAX_SCALE 8   // integer zoom cap: only the smallest sprites reach it
-#define PET_MAX_H 190     // highest any action may rise above the ground line (y=304),
-                          // so it stays under the name and mood lines
+#define PET_MAX_H 200     // highest any action may rise above the ground line (y=304):
+                          // a head at y=104 touches the mood line but does not cover it
 // rows an action draws between its highest pixel and its feet
 inline uint8_t pmdAboveGround(const PmdAct &a) { return a.base > a.top ? a.base - a.top : a.h; }
 inline uint8_t pmdVisH(const PmdAct &a) { return pmdAboveGround(a); }
