@@ -6066,6 +6066,16 @@ void drawPetPmdM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
 void drawPetPmd(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil) {
   drawPetPmdM(pmd, actId, cx, groundY, t, loop, sil);
 }
+// Bilinear blend of four RGB565 colours; tx and ty are 0..1 across the cell.
+static uint16_t blendRGB565(uint16_t c00, uint16_t c10, uint16_t c01, uint16_t c11, float tx, float ty) {
+  float w00 = (1 - tx) * (1 - ty), w10 = tx * (1 - ty), w01 = (1 - tx) * ty, w11 = tx * ty;
+  float r = ((c00 >> 11) & 31) * w00 + ((c10 >> 11) & 31) * w10 + ((c01 >> 11) & 31) * w01 + ((c11 >> 11) & 31) * w11;
+  float g = ((c00 >> 5) & 63) * w00 + ((c10 >> 5) & 63) * w10 + ((c01 >> 5) & 63) * w01 + ((c11 >> 5) & 63) * w11;
+  float b = (c00 & 31) * w00 + (c10 & 31) * w10 + (c01 & 31) * w01 + (c11 & 31) * w11;
+  int ri = (int)(r + 0.5f), gi = (int)(g + 0.5f), bi = (int)(b + 0.5f);
+  ri = ri > 31 ? 31 : ri; gi = gi > 63 ? 63 : gi; bi = bi > 31 ? 31 : bi;
+  return (uint16_t)((ri << 11) | (gi << 5) | bi);
+}
 // draws one action at a fixed integer zoom s, anchored by its feet
 void drawPmdActAt(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t s) {
   const PmdAct &a = m.acts[actId];
@@ -6075,12 +6085,47 @@ void drawPmdActAt(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, boo
   // anclar por los pies (a.base), no por el alto del lienzo: asi las acciones
   // con padding distinto (Hurt, Eat...) quedan todas a la misma altura de suelo
   int x0 = cx - a.w * s / 2, y0 = groundY - (a.base ? a.base : a.h) * s;
-  for (int r = 0; r < a.h; r++) {
-    const uint8_t *row = fr + r * a.w;
-    for (int c = 0; c < a.w; c++) {
-      uint8_t idx = row[c];
-      if (idx == 0xFF) continue;
-      gfx->fillRect(x0 + c * s, y0 + r * s, s, s, sil ? INK_K : m.pal[idx]);
+  if (sil) {  // silhouette: flat shape, no shading
+    for (int r = 0; r < a.h; r++) {
+      const uint8_t *row = fr + r * a.w;
+      for (int c = 0; c < a.w; c++) {
+        if (row[c] == 0xFF) continue;
+        gfx->fillRect(x0 + c * s, y0 + r * s, s, s, INK_K);
+      }
+    }
+    return;
+  }
+  // Smooth scaling: each output pixel blends the four nearest sprite pixels, so
+  // colours fade across the picture instead of stepping in squares. At the edge
+  // against the transparent background the nearest drawn pixel is used, so the
+  // outline stays sharp.
+  const int W = a.w * s, H = a.h * s;
+  for (int Y = 0; Y < H; Y++) {
+    float fy = (Y + 0.5f) / s - 0.5f;
+    int ra = (int)floorf(fy);
+    float ty = fy - ra;
+    int rb = ra + 1;
+    ra = ra < 0 ? 0 : (ra > a.h - 1 ? a.h - 1 : ra);
+    rb = rb < 0 ? 0 : (rb > a.h - 1 ? a.h - 1 : rb);
+    for (int X = 0; X < W; X++) {
+      float fx = (X + 0.5f) / s - 0.5f;
+      int ca = (int)floorf(fx);
+      float tx = fx - ca;
+      int cb = ca + 1;
+      ca = ca < 0 ? 0 : (ca > a.w - 1 ? a.w - 1 : ca);
+      cb = cb < 0 ? 0 : (cb > a.w - 1 ? a.w - 1 : cb);
+      uint8_t p00 = fr[ra * a.w + ca], p10 = fr[ra * a.w + cb];
+      uint8_t p01 = fr[rb * a.w + ca], p11 = fr[rb * a.w + cb];
+      uint16_t col;
+      if (p00 == 0xFF || p10 == 0xFF || p01 == 0xFF || p11 == 0xFF) {
+        int rn = ty < 0.5f ? ra : rb, cn = tx < 0.5f ? ca : cb;
+        uint8_t n = fr[rn * a.w + cn];
+        if (n == 0xFF) continue;
+        col = m.pal[n];
+      } else {
+        col = blendRGB565(m.pal[p00], m.pal[p10], m.pal[p01], m.pal[p11], tx, ty);
+      }
+      gfx->fillRect(x0 + X, y0 + Y, 1, 1, col);
     }
   }
 }
