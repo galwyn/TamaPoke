@@ -106,6 +106,7 @@ struct FakeSerial {
 extern FakeSerial Serial;
 
 struct FakeESP {
+  String getSketchMD5() { return String("emulator"); }
   uint32_t getFreeHeap() { return 294024; }
   uint32_t getMinFreeHeap() { return 281000; }
   uint32_t getFreePsram() { return 4L * 1024 * 1024; }

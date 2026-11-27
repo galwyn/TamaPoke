@@ -372,6 +372,30 @@ what rate-limits rematching. A fully trained creature is told so.
   MX1.25 connector)
 - Pins taken from the [official Waveshare repo](https://github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.75) (see `pin_config.h`)
 
+## Screenshots from the board
+
+The serial command `SNAP` sends the frame the firmware last drew, and
+`tools/snap.py` saves it as a PNG (needs `pyserial`; close any serial console
+first, only one program can use the port):
+
+```bash
+python3 tools/snap.py -o main.png
+```
+
+To check that the board runs the build you think it does, compile into a folder,
+upload from it, and compare:
+
+```bash
+FQBN="esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashSize=16M,PSRAM=opi,PartitionScheme=app3M_fat9M_16MB"
+arduino-cli compile --fqbn "$FQBN" --output-dir build/snap .
+arduino-cli upload -p /dev/cu.usbmodemXXXX --fqbn "$FQBN" --input-dir build/snap .
+python3 tools/snap.py --expect-bin build/snap/TamaPoke.ino.bin
+```
+
+The picture is the firmware's framebuffer, not a photo of the panel: a panel that
+is dark or stuck still returns the drawn frame. `screen=off` in the output means
+the PWR button switched the screen off. Tool tests: `python3 tools/test_snap.py`.
+
 ## Libraries (Arduino IDE / arduino-cli)
 
 | Library | Author | Use |

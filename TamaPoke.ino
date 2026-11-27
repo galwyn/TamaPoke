@@ -849,6 +849,48 @@ void updateBrightness(uint32_t now) {
 
 // ---------- consola serie (provision de SD + depuracion) ----------
 
+// SNAP: sends the frame the firmware last drew, so a computer on the USB cable
+// can see what the screen is meant to show. tools/snap.py turns it into a PNG.
+//
+//   SNAP 1 <width> <height> fw=<version> screen=<on|off> md5=<this build>
+//   one line per row: runs of 6 hex digits, 2 for the length (01-FF), 4 for RGB565
+//   SNAPEND <FNV-1a 32 of every pixel, low byte first>
+//
+// It reads the framebuffer, not the panel: a panel that is dark or stuck still
+// answers with the frame the firmware drew.
+static void sendSnapshot() {
+  const uint16_t *fb = gfx->getFramebuffer();
+  if (!fb) {
+    Serial.println("SNAPERR no framebuffer");
+    return;
+  }
+  // setup() sets this to 0 so a console nobody reads never stalls the game; here
+  // the whole frame has to arrive.
+  Serial.setTxTimeoutMs(1000);
+  Serial.printf("SNAP 1 %d %d fw=%s screen=%s md5=%s\n", LCD_WIDTH, LCD_HEIGHT,
+                FW_VERSION, screenOff ? "off" : "on", ESP.getSketchMD5().c_str());
+  static char line[LCD_WIDTH * 6 + 1];
+  uint32_t sum = 2166136261u;
+  for (int y = 0; y < LCD_HEIGHT; y++) {
+    const uint16_t *row = fb + (size_t)y * LCD_WIDTH;
+    int n = 0;
+    for (int x = 0; x < LCD_WIDTH;) {
+      uint16_t c = row[x];
+      int run = 1;
+      while (x + run < LCD_WIDTH && run < 255 && row[x + run] == c) run++;
+      n += snprintf(line + n, 7, "%02X%04X", run, c);
+      for (int i = 0; i < run; i++) {
+        sum = (sum ^ (c & 0xFF)) * 16777619u;
+        sum = (sum ^ (c >> 8)) * 16777619u;
+      }
+      x += run;
+    }
+    Serial.println(line);
+  }
+  Serial.printf("SNAPEND %08lX\n", (unsigned long)sum);
+  Serial.setTxTimeoutMs(0);
+}
+
 void handleSerial() {
   if (!Serial.available()) return;
   String line = Serial.readStringUntil('\n');
@@ -856,7 +898,9 @@ void handleSerial() {
   if (line.length() == 0) return;
   if (sdSerialCommand(line)) return;
 
-  if (line == "HATCH") {
+  if (line == "SNAP") {
+    sendSnapshot();
+  } else if (line == "HATCH") {
     pet.eggTap(); pet.eggTap(); pet.eggTap();
     Serial.println("DONE");
   } else if (line.startsWith("SPEC ")) {
