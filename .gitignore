@@ -39,3 +39,6 @@ tamapoke.nvs
 tamapoke.nvs.*
 tools/_*.svg
 backups/
+
+# official artwork: personal use only, never committed (tools/fetch_artwork.py)
+tools/artwork_cache/

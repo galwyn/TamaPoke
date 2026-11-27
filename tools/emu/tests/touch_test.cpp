@@ -34,6 +34,7 @@ void setup();
 void loop();
 extern Pet pet;   // defined in the sketch
 extern bool trainOpen, sackOpen, gameOpen, menuOpen, cardOpen, movePickOpen, spdOpen;
+extern bool gArtModern;
 extern uint8_t movePickSlot, movePickPage;
 extern bool battleOpen, btlOver, btlWon;
 extern Combatant btlYou, btlFoe;
@@ -169,7 +170,20 @@ int main(int argc, char **argv) {
 
   click(233, 60);                        // name/status band opens the menu
   if (!menuOpen) { printf("FAIL: name band did not open the menu\n"); return 1; }
-  click(233, 104 + 16 + 22);             // menu row 0 == STATS == MENU_ROW_Y(0)+22
+  // six rows since the ART row: MENU_ROW_Y(i) = 64 + 16 + i * (46 + 6)
+  {
+    bool was = gArtModern;
+    click(233, 80 + 3 * 52 + 22);        // menu row 3 == ART
+    if (gArtModern == was || !menuOpen) {
+      printf("FAIL: ART row -> modern %d -> %d, menu open %d (want flipped, open)\n",
+             (int)was, (int)gArtModern, (int)menuOpen);
+      return 1;
+    }
+    click(233, 80 + 3 * 52 + 22);        // and back, so the rest of the test is unchanged
+    if (gArtModern != was) { printf("FAIL: ART row did not flip back\n"); return 1; }
+    printf("PASS: menu ART row flips the art style and keeps the menu open\n");
+  }
+  click(233, 80 + 22);                   // menu row 0 == STATS == MENU_ROW_Y(0)+22
   if (!cardOpen || cardPage != 1) {
     printf("FAIL: STATS row -> cardOpen=%d cardPage=%d (want 1,1)\n",
            (int)cardOpen, (int)cardPage);

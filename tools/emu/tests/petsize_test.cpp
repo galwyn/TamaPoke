@@ -59,5 +59,23 @@ int main(){
   ck(tooTall == 0, "no standing pet is drawn over the PET_TARGET_H target");
   ck(tooWide == 0, "no standing pet's canvas is wider than the panel");
   ck(tooTallAct == 0, "no action rises more than PET_MAX_H above the ground line");
+
+  // Modern art: every Kanto picture on the card loads and fits where it stands.
+  // The pictures are personal-use downloads (tools/fetch_artwork.py), so a
+  // checkout without them skips this rather than failing.
+  int artLoaded = 0, artBad = 0;
+  for (int dex = 1; dex <= 151; dex++) {
+    ArtMon a;
+    if (!a.load(dex, false)) continue;
+    artLoaded++;
+    if (a.h > PET_MAX_H || a.w > ART_MAX_W || a.h < 40) artBad++;
+    ArtMon sh;
+    if (sh.load(dex, true) && sh.h != a.h && sh.w != a.w) artBad++;  // shiny = same picture, recoloured
+  }
+  printf("modern pictures loaded: %d\n", artLoaded);
+  if (artLoaded) {
+    ck(artLoaded == 151, "every Kanto species has a modern picture");
+    ck(artBad == 0, "each picture fits under the name line and inside the panel");
+  }
   return bad ? 1 : 0;
 }

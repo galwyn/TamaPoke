@@ -130,6 +130,8 @@ enum StrId : uint8_t {
   S_RELEASE_GONE,   // ...and the warning under it: this one does not come back
   S_BOX_TAKE,       // box detail sheet: move this creature into the party
   S_RETIRE_GONE,    // retire confirm: an early retire is not banked either
+  S_ART_MODERN,     // menu row: the pet is drawn with the official artwork
+  S_ART_PIXEL,      // menu row: the pet is drawn with the pixel sprites
   STR_COUNT
 };
 

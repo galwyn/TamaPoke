@@ -36,7 +36,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.13"
+#define FW_VERSION "3.14"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -52,6 +52,26 @@ Pet pet;
 SdMon mon;          // sprite B/N (respaldo y minijuego si no hay PMD)
 PmdMon pmd;         // sprite PMD multi-accion (pantalla principal)
 PmdMon evoPmd;      // forma anterior, solo durante el parpadeo de evolucion
+// "Modern" art style: the official artwork, drawn instead of the PMD sprite on
+// the main screen when gArtModern is on and the picture is on the card. The
+// PMD sprite is still loaded alongside: it decides which action is playing and
+// it is what the Pixel style, battles and the gallery draw.
+ArtMon art;
+ArtMon evoArt;      // the previous form's picture, only during evolution
+bool gArtModern = true;
+void loadArtStyle() {
+  Preferences p;
+  p.begin("tamapoke", true);
+  gArtModern = p.getBool("artm", true);
+  p.end();
+}
+void setArtStyle(bool modern) {
+  gArtModern = modern;
+  Preferences p;
+  p.begin("tamapoke", false);
+  p.putBool("artm", modern);
+  p.end();
+}
 int16_t monFor = -2;
 bool monShinyFor = false;
 
@@ -110,15 +130,17 @@ bool menuOpen = false;
 // Four rows: PARTY and GYMS came out, since a swipe right and a swipe left now
 // reach them directly. Sized to the bezel -- the panel is 320 wide, so 160 from
 // the centre, and sqrt(233^2 - 160^2) = 169 means it can only span y 64..402.
-#define MENU_Y 75
+#define MENU_Y 64
 #define MENU_W 320
-#define MENU_H 316
-#define MENU_ROW_H 52
+#define MENU_H 338
+#define MENU_ROW_H 46
 #define MENU_ROW_GAP 6
-// 5 rows: STATS / POKEDEX / SETTINGS / RETIRE / CLOSE. At MENU_Y 75 the panel
-// spans 75..391 and the round display gives a half-width of 171 there against
-// the 160 a row needs, so the corners stay on glass.
-#define MENU_ROWS 5
+// 6 rows: STATS / POKEDEX / SETTINGS / ART / RETIRE / CLOSE. At MENU_Y 64 the
+// panel spans 64..402: 169 px from the centre at both ends, where the round
+// display gives a half-width of 160.4 against the 160 a row needs.
+#define MENU_ROWS 6
+#define MENU_ROW_ART 3
+#define MENU_ROW_RETIRE 4
 #define MENU_ROW_Y(i) (MENU_Y + 16 + (i) * (MENU_ROW_H + MENU_ROW_GAP))
 
 // Party screen. partyPick != 0 means the newcomer needs a slot: the player
@@ -651,6 +673,7 @@ void setup() {
   Serial.printf("TamaPoke fw v%s\n", FW_VERSION);
   bootReport();   // why the last run ended, and what it was doing
   loadLang();  // idioma guardado (ES por defecto)
+  loadArtStyle();
   Wire.begin(IIC_SDA, IIC_SCL);
   // CST9217 (tactil), AXP2101 (PMU) y PCF85063 (RTC) comparten este bus I2C.
   // Red de seguridad para PMU/RTC (SensorLib NO respeta este timeout en el
@@ -714,11 +737,13 @@ void ensureMon() {
   monShinyFor = pet.shiny;
   mon.unload();
   pmd.unload();
+  art.unload();
   beh.x = beh.targetX = 233;
   beh.mode = 0;
   beh.until = 0;
   if (pet.speciesId >= 1 && pet.speciesId <= DEX_COUNT) {
     pmd.load(pet.speciesId, pet.shiny);          // principal: PMD
+    art.load(pet.speciesId, pet.shiny);          // Modern style picture, if on the card
     if (!pmd.loaded) mon.load(pet.speciesId, pet.shiny);  // respaldo: B/N
   }
 }
@@ -1776,15 +1801,16 @@ void onTap(int16_t x, int16_t y) {
       if (x < MENU_X + 18 || x > MENU_X + MENU_W - 18) continue;
       if (y < ry || y > ry + MENU_ROW_H) continue;
       sfxPlay(SFX_TAP);
+      if (i == MENU_ROW_ART) { setArtStyle(!gArtModern); return; }   // flips in place, menu stays open
       menuOpen = false;
       if (i == 0) { cardOpen = true; cardPage = 1; }   // straight to the stats page
       else if (i == 1) { galleryOpen = true; galleryPick = true; galleryPage = 0; rpickPage = 0; galleryDetail = 0; galleryDirty = true; }
       else if (i == 2) { openClock(); }
-      else if (i == 3) {
+      else if (i == MENU_ROW_RETIRE) {
         if (!pet.canRetireNow()) { sfxPlay(SFX_DENY); return; }
         choiceKind = 3; choiceUntil = millis() + 12000;
       }
-      return;                                     // i == 4 is CLOSE: just shut
+      return;                                     // the last row is CLOSE: just shut
     }
     return;
   }
@@ -1875,7 +1901,7 @@ void onTap(int16_t x, int16_t y) {
     bool b1 = inX && y >= c1t && y <= c1b;   // accion
     bool b2 = inX && y >= c2t && y <= c2b;   // mantener / quedaros
     if (choiceKind == 1) {                 // evolucion
-      if (b1) { int16_t old = pet.speciesId; pet.evolve(); evoPmd.load(old, pet.shiny); }
+      if (b1) { int16_t old = pet.speciesId; pet.evolve(); evoPmd.load(old, pet.shiny); evoArt.load(old, pet.shiny); }
       else if (b2) pet.declineEvolve();
     } else if (choiceKind == 3) {          // retirada a peticion
       if (b1) pet.startRetire();
@@ -5163,7 +5189,8 @@ static void menuRowLabel(int i, char *out, size_t n) {
     case 0: snprintf(out, n, "%s", T(S_STATS)); break;
     case 1: snprintf(out, n, T(S_POKEDEX_FMT), pet.registeredCount(), DEX_COUNT); break;
     case 2: snprintf(out, n, "%s", T(S_SETTINGS)); break;
-    case 3: snprintf(out, n, "%s", T(S_RETIRE)); break;
+    case MENU_ROW_ART: snprintf(out, n, "%s", T(gArtModern ? S_ART_MODERN : S_ART_PIXEL)); break;
+    case MENU_ROW_RETIRE: snprintf(out, n, "%s", T(S_RETIRE)); break;
     default: snprintf(out, n, "%s", T(S_CLOSE)); break;
   }
 }
@@ -5180,7 +5207,7 @@ void drawMenu() {
   for (int i = 0; i < MENU_ROWS; i++) {
     int y = MENU_ROW_Y(i);
     bool close = (i == MENU_ROWS - 1);
-    bool dead = (i == 3 && !pet.canRetireNow());   // an egg or a companion
+    bool dead = (i == MENU_ROW_RETIRE && !pet.canRetireNow());   // an egg or a companion
     gfx->fillRoundRect(MENU_X + 18, y, MENU_W - 36, MENU_ROW_H, 12,
                        close || dead ? UI_TRACK : UI_BG_DAY);
     gfx->drawRoundRect(MENU_X + 18, y, MENU_W - 36, MENU_ROW_H, 12, UI_INK);
@@ -6060,12 +6087,86 @@ void drawPmdActM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool
 // The pet on the main screen (and its evolution and farewell): sized by what the
 // sprite draws, not by its padded canvas -- see petPmdScale() in sdmon.h.
 void drawPetPmdM(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil) {
+  ArtMon *am = (&m == &pmd) ? &art : (&m == &evoPmd) ? &evoArt : nullptr;
+  if (gArtModern && am && am->loaded) {
+    drawArtAct(*am, actId, cx, groundY, t, sil);
+    return;
+  }
   if (!m.acts[actId].frames) return;
   drawPmdActAt(m, actId, cx, groundY, t, loop, sil, petPmdScale(m, actId));
 }
 void drawPetPmd(uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil) {
   drawPetPmdM(pmd, actId, cx, groundY, t, loop, sil);
 }
+// ---------- Modern art: one still picture, moved by code ----------
+
+// fg over bg at alpha a (0..255), both RGB565
+static inline uint16_t blend565(uint16_t bg, uint16_t fg, uint8_t a) {
+  uint16_t ia = 255 - a;
+  uint16_t r = (((fg >> 11) & 31) * a + ((bg >> 11) & 31) * ia) / 255;
+  uint16_t g = (((fg >> 5) & 63) * a + ((bg >> 5) & 63) * ia) / 255;
+  uint16_t b = ((fg & 31) * a + (bg & 31) * ia) / 255;
+  return (r << 11) | (g << 5) | b;
+}
+// RGB565 scaled toward black: k = 255 keeps it, 128 is half as bright
+static inline uint16_t dim565(uint16_t c, uint8_t k) {
+  uint16_t r = (((c >> 11) & 31) * k) >> 8, g = (((c >> 5) & 63) * k) >> 8, b = ((c & 31) * k) >> 8;
+  return (r << 11) | (g << 5) | b;
+}
+
+// Draws the picture with its bottom row on groundY, centred on cx. squash
+// shortens it by that many rows (negative stretches it), which is how it
+// breathes and lands; flip mirrors it; dim darkens it; sil draws a shadow.
+void drawArt(const ArtMon &a, int cx, int groundY, bool sil, bool flip, int dy, int squash, uint8_t dim) {
+  uint16_t *fb = gfx->getFramebuffer();
+  if (!fb || !a.loaded) return;
+  int hh = (int)a.h - squash;
+  if (hh < 8) hh = 8;
+  int x0 = cx - a.w / 2, y0 = groundY - hh + dy;
+  for (int oy = 0; oy < hh; oy++) {
+    int y = y0 + oy;
+    if (y < 0 || y >= LCD_HEIGHT) continue;
+    uint16_t sx, n;
+    const uint8_t *px;
+    if (!a.row((uint16_t)((uint32_t)oy * a.h / hh), &sx, &n, &px)) continue;
+    uint16_t *line = fb + (uint32_t)y * LCD_WIDTH;
+    for (uint16_t i = 0; i < n; i++, px += 3) {
+      uint8_t al = px[2];
+      if (!al) continue;
+      int col = sx + i;
+      int x = x0 + (flip ? (a.w - 1 - col) : col);
+      if (x < 0 || x >= LCD_WIDTH) continue;
+      uint16_t c = sil ? INK_K : (uint16_t)(px[0] | (px[1] << 8));
+      if (dim != 255 && !sil) c = dim565(c, dim);
+      line[x] = al >= 250 ? c : blend565(line[x], c, al);
+    }
+  }
+}
+
+// What each PMD action looks like when the picture cannot animate itself.
+void drawArtAct(const ArtMon &a, uint8_t actId, int cx, int groundY, uint32_t t, bool sil) {
+  float ph = t / 1000.0f;
+  int dy = 0, sq = 0;
+  bool flip = false;
+  uint8_t dim = 255;
+  switch (actId) {
+    case PMD_WALKR: flip = true;  // fall through: same step, facing the other way
+    case PMD_WALKL: dy = -(int)(fabsf(sinf(ph * 8.0f)) * 8); break;
+    case PMD_SLEEP: dim = 140; sq = (int)(3 + 3 * sinf(ph * 1.5f)); break;
+    case PMD_EAT: dy = -(int)(fabsf(sinf(ph * 10.0f)) * 5); sq = (int)(3 * fabsf(cosf(ph * 10.0f))); break;
+    case PMD_HURT: cx += (int)(4 * sinf(ph * 40.0f)); dim = 200; break;
+    case PMD_POSE: case PMD_HOP: case PMD_ATTACK: {
+      float hop = fabsf(sinf(ph * 5.0f));
+      dy = -(int)(hop * 18);
+      sq = hop < 0.15f ? 6 : -2;  // lands squashed, flies a little stretched
+      break;
+    }
+    case PMD_NOD: sq = (int)(6 * fabsf(sinf(ph * 6.0f))); break;
+    default: sq = (int)(2.5f + 2.5f * sinf(ph * 2.2f)); break;  // idle and breath
+  }
+  drawArt(a, cx, groundY, sil, flip, dy, sq, dim);
+}
+
 // draws one action at a fixed integer zoom s, anchored by its feet
 void drawPmdActAt(PmdMon &m, uint8_t actId, int cx, int groundY, uint32_t t, bool loop, bool sil, uint8_t s) {
   const PmdAct &a = m.acts[actId];
@@ -6126,6 +6227,7 @@ void drawPetPMD() {
     return;
   }
   if (evoPmd.loaded) evoPmd.unload();  // termino la evolucion: libera la forma anterior
+  if (evoArt.loaded) evoArt.unload();
 
   PetMood m = pet.mood();
   uint8_t act;

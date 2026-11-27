@@ -309,3 +309,42 @@ bool sdSerialCommand(const String &line) {
   }
   return false;
 }
+
+// ---------------------------------------------------------------------------
+// Modern art (TPA1): see ArtMon in sdmon.h and tools/fetch_artwork.py.
+bool ArtMon::load(int16_t dexNum, bool shiny) {
+  if (dexNum < 1 || dexNum > 999) return false;
+  unload();
+  if (!sdReady) return false;
+  char path[28];
+  snprintf(path, sizeof(path), "/mons/a%s%03u.bin", shiny ? "s" : "", (unsigned)dexNum);
+  File f = SD_MMC.open(path, FILE_READ);
+  if (!f && shiny) {  // no shiny picture: use the normal one
+    snprintf(path, sizeof(path), "/mons/a%03u.bin", (unsigned)dexNum);
+    f = SD_MMC.open(path, FILE_READ);
+  }
+  if (!f) return false;
+  size = f.size();
+  if (size < 8 || size > 512UL * 1024) { f.close(); size = 0; return false; }
+  blob = (uint8_t *)ps_malloc(size);
+  if (!blob || f.read(blob, size) != size || !artIndex(blob, size, &w, &h)) {
+    f.close();
+    unload();
+    return false;
+  }
+  f.close();
+  rowAt = (uint32_t *)ps_malloc((uint32_t)h * sizeof(uint32_t));
+  if (!rowAt || !artRows(blob, size, w, h, rowAt)) { unload(); return false; }
+  dex = dexNum;
+  loaded = true;
+  Serial.printf("art %s: %ux%u (%u KB)\n", path, w, h, size / 1024);
+  return true;
+}
+
+void ArtMon::unload() {
+  if (blob) { free(blob); blob = nullptr; }
+  if (rowAt) { free(rowAt); rowAt = nullptr; }
+  w = h = 0;
+  size = 0;
+  loaded = false;
+}

@@ -74,6 +74,52 @@ inline uint8_t petPmdScale(const PmdMon &m, uint8_t actId) {
   return s;
 }
 
+// ---------------------------------------------------------------------------
+// "Modern" art: the official artwork, one still picture per species, packed by
+// tools/fetch_artwork.py into /mons/aNNN.bin (shiny: asNNN.bin), format TPA1.
+// Stored at the size it is drawn, so the board never scales it.
+#define ART_MAX_H 190
+#define ART_MAX_W 230
+struct ArtMon {
+  bool loaded = false;
+  int16_t dex = 0;
+  uint16_t w = 0, h = 0;
+  uint8_t *blob = nullptr;
+  uint32_t size = 0;
+  uint32_t *rowAt = nullptr;  // byte offset of each row's header in blob
+  bool load(int16_t dexNum, bool shiny = false);
+  void unload();
+  // row r: first column, pixel count, and the pixels (u16 RGB565, u8 alpha each)
+  bool row(uint16_t r, uint16_t *x0, uint16_t *n, const uint8_t **px) const {
+    if (!loaded || r >= h) return false;
+    const uint8_t *p = blob + rowAt[r];
+    *x0 = p[0] | (p[1] << 8);
+    *n = p[2] | (p[3] << 8);
+    *px = p + 4;
+    return true;
+  }
+};
+// Checks a TPA1 blob and fills rowAt[] (h entries, allocated by the caller
+// after reading w and h). Shared by the board and the emulator loaders so the
+// format is checked in exactly one place.
+inline bool artIndex(const uint8_t *b, uint32_t size, uint16_t *w, uint16_t *h) {
+  if (size < 8 || b[0] != 'T' || b[1] != 'P' || b[2] != 'A' || b[3] != '1') return false;
+  *w = b[4] | (b[5] << 8);
+  *h = b[6] | (b[7] << 8);
+  return *w > 0 && *h > 0 && *w <= ART_MAX_W && *h <= ART_MAX_H;
+}
+inline bool artRows(const uint8_t *b, uint32_t size, uint16_t w, uint16_t h, uint32_t *rowAt) {
+  uint32_t o = 8;
+  for (uint16_t r = 0; r < h; r++) {
+    if (o + 4 > size) return false;
+    uint16_t x0 = b[o] | (b[o + 1] << 8), n = b[o + 2] | (b[o + 3] << 8);
+    if ((uint32_t)x0 + n > w) return false;
+    rowAt[r] = o;
+    o += 4 + (uint32_t)n * 3;
+  }
+  return o == size;
+}
+
 // miniaturas de la galeria (thumbs.bin entero en PSRAM)
 struct SdThumbs {
   bool loaded = false;

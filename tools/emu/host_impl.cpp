@@ -102,6 +102,33 @@ void PmdMon::unload() {
   loaded = false;
 }
 
+bool ArtMon::load(int16_t dexNum, bool shiny) {
+  if (dexNum < 1 || dexNum > 999) return false;
+  unload();
+  char p[512];
+  snprintf(p, sizeof(p), "%s/a%s%03u.bin", g_spriteDir.c_str(), shiny ? "s" : "", (unsigned)dexNum);
+  blob = slurp(p, &size);
+  if (!blob && shiny) {
+    snprintf(p, sizeof(p), "%s/a%03u.bin", g_spriteDir.c_str(), (unsigned)dexNum);
+    blob = slurp(p, &size);
+  }
+  if (!blob) { size = 0; return false; }
+  if (!artIndex(blob, size, &w, &h)) { unload(); return false; }
+  rowAt = (uint32_t *)malloc((size_t)h * sizeof(uint32_t));
+  if (!rowAt || !artRows(blob, size, w, h, rowAt)) { unload(); return false; }
+  dex = dexNum;
+  loaded = true;
+  return true;
+}
+
+void ArtMon::unload() {
+  if (blob) { free(blob); blob = nullptr; }
+  if (rowAt) { free(rowAt); rowAt = nullptr; }
+  w = h = 0;
+  size = 0;
+  loaded = false;
+}
+
 bool SdThumbs::load() {
   uint32_t size = 0;
   data = slurp(g_spriteDir + "/thumbs.bin", &size);
