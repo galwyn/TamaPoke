@@ -80,6 +80,7 @@ inline uint8_t petPmdScale(const PmdMon &m, uint8_t actId) {
 // Stored at the size it is drawn, so the board never scales it.
 #define ART_MAX_H 190
 #define ART_MAX_W 230
+#define ICON_PX 52   // the food menu's item pictures fit 52 x 52
 struct ArtMon {
   bool loaded = false;
   int16_t dex = 0;
@@ -88,6 +89,7 @@ struct ArtMon {
   uint32_t size = 0;
   uint32_t *rowAt = nullptr;  // byte offset of each row's header in blob
   bool load(int16_t dexNum, bool shiny = false);
+  bool loadFile(const char *name);  // "i_red" -> /mons/i_red.bin
   void unload();
   // row r: first column, pixel count, and the pixels (u16 RGB565, u8 alpha each)
   bool row(uint16_t r, uint16_t *x0, uint16_t *n, const uint8_t **px) const {

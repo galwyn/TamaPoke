@@ -312,33 +312,47 @@ bool sdSerialCommand(const String &line) {
 
 // ---------------------------------------------------------------------------
 // Modern art (TPA1): see ArtMon in sdmon.h and tools/fetch_artwork.py.
+// reads and indexes one TPA1 file; false (and nothing held) if it is not usable
+static bool artReadSd(ArtMon &a, const char *path) {
+  File f = SD_MMC.open(path, FILE_READ);
+  if (!f) return false;
+  a.size = f.size();
+  if (a.size < 8 || a.size > 512UL * 1024) { f.close(); a.size = 0; return false; }
+  a.blob = (uint8_t *)ps_malloc(a.size);
+  if (!a.blob || f.read(a.blob, a.size) != a.size || !artIndex(a.blob, a.size, &a.w, &a.h)) {
+    f.close();
+    a.unload();
+    return false;
+  }
+  f.close();
+  a.rowAt = (uint32_t *)ps_malloc((uint32_t)a.h * sizeof(uint32_t));
+  if (!a.rowAt || !artRows(a.blob, a.size, a.w, a.h, a.rowAt)) { a.unload(); return false; }
+  a.loaded = true;
+  Serial.printf("art %s: %ux%u (%u KB)\n", path, a.w, a.h, a.size / 1024);
+  return true;
+}
+
 bool ArtMon::load(int16_t dexNum, bool shiny) {
   if (dexNum < 1 || dexNum > 999) return false;
   unload();
   if (!sdReady) return false;
   char path[28];
   snprintf(path, sizeof(path), "/mons/a%s%03u.bin", shiny ? "s" : "", (unsigned)dexNum);
-  File f = SD_MMC.open(path, FILE_READ);
-  if (!f && shiny) {  // no shiny picture: use the normal one
+  bool ok = artReadSd(*this, path);
+  if (!ok && shiny) {  // no shiny picture: use the normal one
     snprintf(path, sizeof(path), "/mons/a%03u.bin", (unsigned)dexNum);
-    f = SD_MMC.open(path, FILE_READ);
+    ok = artReadSd(*this, path);
   }
-  if (!f) return false;
-  size = f.size();
-  if (size < 8 || size > 512UL * 1024) { f.close(); size = 0; return false; }
-  blob = (uint8_t *)ps_malloc(size);
-  if (!blob || f.read(blob, size) != size || !artIndex(blob, size, &w, &h)) {
-    f.close();
-    unload();
-    return false;
-  }
-  f.close();
-  rowAt = (uint32_t *)ps_malloc((uint32_t)h * sizeof(uint32_t));
-  if (!rowAt || !artRows(blob, size, w, h, rowAt)) { unload(); return false; }
-  dex = dexNum;
-  loaded = true;
-  Serial.printf("art %s: %ux%u (%u KB)\n", path, w, h, size / 1024);
-  return true;
+  if (ok) dex = dexNum;
+  return ok;
+}
+
+bool ArtMon::loadFile(const char *name) {
+  unload();
+  if (!sdReady) return false;
+  char path[40];
+  snprintf(path, sizeof(path), "/mons/%s.bin", name);
+  return artReadSd(*this, path);
 }
 
 void ArtMon::unload() {

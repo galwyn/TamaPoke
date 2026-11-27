@@ -36,7 +36,7 @@
 
 // Version del firmware. Subir este numero en cada release (y manifest.json para
 // el instalador web). Se muestra en la pantalla de ajustes y por serie al arrancar.
-#define FW_VERSION "3.14"
+#define FW_VERSION "3.15"
 
 Arduino_DataBus *bus = new Arduino_ESP32QSPI(
   LCD_CS, LCD_SCLK, LCD_SDIO0, LCD_SDIO1, LCD_SDIO2, LCD_SDIO3);
@@ -59,6 +59,18 @@ PmdMon evoPmd;      // forma anterior, solo durante el parpadeo de evolucion
 ArtMon art;
 ArtMon evoArt;      // the previous form's picture, only during evolution
 bool gArtModern = true;
+// the food menu's four items in the Modern style: red, blue, green berry, candy
+ArtMon foodArt[4];
+bool foodArtTried = false;
+// loaded on first use rather than at boot, so a card filled after boot still works
+bool foodArtReady() {
+  if (!foodArtTried) {
+    static const char *const NAMES[4] = { "i_red", "i_blue", "i_green", "i_candy" };
+    for (int i = 0; i < 4; i++) foodArt[i].loadFile(NAMES[i]);
+    foodArtTried = true;
+  }
+  return foodArt[0].loaded && foodArt[1].loaded && foodArt[2].loaded && foodArt[3].loaded;
+}
 void loadArtStyle() {
   Preferences p;
   p.begin("tamapoke", true);
@@ -2357,10 +2369,16 @@ void render() {
     } else {
       gfx->fillRoundRect(101, 288, 264, 64, 14, UI_WHITE);
       gfx->drawRoundRect(101, 288, 264, 64, 14, inkColor());
-      drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
-      drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
-      drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
-      drawMap(SPR_ICON_CANDY, 16, 308, 296, 3, false);
+      if (gArtModern && foodArtReady()) {
+        // each item centred in its 66 px slot, the slot centres at 134 + 66 i
+        for (int i = 0; i < 4; i++)
+          drawArt(foodArt[i], 134 + 66 * i, 320 + foodArt[i].h / 2, false, false, 0, 0, 255);
+      } else {
+        drawMap(SPR_ICON_FOOD, 16, 110, 296, 3, false);
+        drawMap(SPR_ICON_BERRY_B, 16, 176, 296, 3, false);
+        drawMap(SPR_ICON_BERRY_G, 16, 242, 296, 3, false);
+        drawMap(SPR_ICON_CANDY, 16, 308, 296, 3, false);
+      }
     }
   }
 
@@ -6344,7 +6362,13 @@ void drawButtons() {
     int bx = buttons[i].cx - BTN_HALF, by = buttons[i].cy - BTN_HALF;
     if (!pet.sleeping) gfx->fillRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, UI_WHITE);
     gfx->drawRoundRect(bx, by, 2 * BTN_HALF, 2 * BTN_HALF, 14, inkColor());
-    if (!off) drawMap(buttons[i].icon, 16, buttons[i].cx - 16, buttons[i].cy - 16, 2, false);
+    if (off) continue;
+    if (i == BTN_FOOD && gArtModern && foodArtReady()) {
+      // the red berry picture (52 px) fits the 60 px button whole, centred
+      drawArt(foodArt[0], buttons[i].cx, buttons[i].cy + foodArt[0].h / 2, false, false, 0, 0, 255);
+      continue;
+    }
+    drawMap(buttons[i].icon, 16, buttons[i].cx - 16, buttons[i].cy - 16, 2, false);
   }
 }
 
